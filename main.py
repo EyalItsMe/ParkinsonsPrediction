@@ -89,7 +89,8 @@ if __name__ == "__main__":
     #                     chunk_path = os.path.join(output_subdir, chunk_filename)
     #                     chunk.export(chunk_path, format="wav")
 
-    audio_dataset = AudioDataset(root_dir="./new_dataset")
+    feature_extractor = "hubert"
+    audio_dataset = AudioDataset(root_dir="./new_dataset", feature_extractor=feature_extractor)
     # dataloader = DataLoader(audio_dataset, batch_size=4, shuffle=True)
 
     # Define the split ratio
@@ -111,11 +112,11 @@ if __name__ == "__main__":
     hidden_dim = 250
     output_dim = 2  # Healthy (0) or Parkinson's (1)
     learning_rate = 0.001
-    num_epochs = 10
+    num_epochs = 5
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    #model = BasicClassifier(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim).to(device)
-    model = MFCCCNN().to(device)
+    model = BasicClassifier(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim).to(device)
+    # model = MFCCCNN().to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
