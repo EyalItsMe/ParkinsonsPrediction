@@ -54,8 +54,8 @@ class AudioDataset(Dataset):
                         elif "pd" in file.lower():
                             self.labels.append(1)  # 1 for non-healthy
                         i += 1
-                        # if i == 50:
-                        #     return
+                        if i == 500:
+                            return
     def _load_audio(self, audio_path, feature_extractor):
         waveform, sample_rate = torchaudio.load(audio_path)
         if feature_extractor == "hubert":
@@ -86,6 +86,7 @@ class AudioDataset(Dataset):
     def _extract_hubert(self, waveform):
         processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft")
         model = HubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
+
         input_values = processor(waveform.squeeze(0), return_tensors="pt", sampling_rate=16000).input_values
         with torch.no_grad():
             outputs = model(input_values)

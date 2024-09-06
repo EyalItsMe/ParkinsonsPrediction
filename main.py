@@ -12,6 +12,7 @@ import torch.optim as optim
 from BasicClassifier import BasicClassifier
 import torch.nn as nn
 from ConvultionCNN import MFCCCNN
+from BiLstmCNN import CNNBiLSTM
 import matplotlib.pyplot as plt
 
 def train(model, dataloader, criterion, optimizer, device):
@@ -120,6 +121,9 @@ if __name__ == "__main__":
     # feature_extractor = "mel"
     feature_extractor = "hubert"
     # feature_extractor = "whisper"
+    model_name = "BasicClassifier"
+    # model_name = "MFCC-CNN"
+    # model_name = "BiLSTM-CNN"
     nmfcc = 49
     max_length = 280
     feature_dims = {
@@ -153,11 +157,14 @@ if __name__ == "__main__":
 
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model_name = "BasicClassifier"
-    model = BasicClassifier(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim).to(device)
-    # input_dim_mfcccnn = 512
-    # model = MFCCCNN(input_dim=input_dim_mfcccnn, nmfcc=nmfcc).to(device)
-    # model_name = "MFCC-CNN"
+    if model_name == "BasicClassifier":
+        model = BasicClassifier(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim).to(device)
+    elif model_name == "MFCC-CNN":
+        input_dim_mfcccnn = 512
+        model = MFCCCNN(input_dim=input_dim_mfcccnn, nmfcc=nmfcc).to(device)
+    elif model_name == "BiLSTM-CNN":
+        model = CNNBiLSTM(input_dim=input_dim, nmfcc=nmfcc).to(device)
+
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
