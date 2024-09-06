@@ -3,7 +3,7 @@ import torchaudio
 from torch.utils.data import Dataset
 import torch
 import librosa
-from transformers import Wav2Vec2Processor, HubertModel, WhisperProcessor, WhisperModel
+from transformers import Wav2Vec2Processor, HubertModel, WhisperProcessor, WhisperModel, WhisperFeatureExtractor
 import torch
 import torchaudio
 
@@ -26,7 +26,28 @@ class AudioDataset(Dataset):
                 sample_rate=16000, n_fft=400, hop_length=160, n_mels=nmfcc
             )
 
-        self._load_files_and_labels()
+        self.cache_file = f"{feature_extractor}_dataset_cache.pt"
+
+        if os.path.exists(self.cache_file):
+            print(f"Loading dataset from {self.cache_file}...")
+            self._load_from_cache()
+        else:
+            print("Processing dataset from audio files...")
+            self._load_files_and_labels()
+            print(f"Saving processed dataset to {self.cache_file}...")
+            self._save_to_cache()
+
+    def _save_to_cache(self):
+        data = {
+            "audio_data": self.audio_data,
+            "labels": self.labels
+        }
+        torch.save(data, self.cache_file)
+
+    def _load_from_cache(self):
+        data = torch.load(self.cache_file)
+        self.audio_data = data["audio_data"]
+        self.labels = data["labels"]
 
     def _load_files_and_labels(self):
         i = 0
@@ -43,22 +64,23 @@ class AudioDataset(Dataset):
                     elif self.feature_extractor == "hubert":
                         features = self._extract_hubert(waveform)
                     elif self.feature_extractor == "whisper":
-                        features = self._extract_whisper(waveform, sample_rate)
+                        features = self._extract_whisper(waveform)
                     else:
                         raise ValueError("Invalid feature extractor")
 
-                    if features.shape[0] == 49:
+                    if (features.shape[0] == 49 and self.feature_extractor == "hubert") \
+                            or (features.shape[1] == 384 and self.feature_extractor == "whisper"):
                         self.audio_data.append(features)
                         if "hc" in file.lower():
                             self.labels.append(0)  # 0 for healthy
                         elif "pd" in file.lower():
                             self.labels.append(1)  # 1 for non-healthy
+                        if i % 100 == 0:
+                            print(f"Processed {i} files")
                         i += 1
-                        if i == 500:
-                            return
     def _load_audio(self, audio_path, feature_extractor):
         waveform, sample_rate = torchaudio.load(audio_path)
-        if feature_extractor == "hubert":
+        if feature_extractor == "hubert" or feature_extractor == "whisper":
             if sample_rate != 16000:
                 resampler = torchaudio.transforms.Resample(orig_freq=sample_rate, new_freq=16000)
                 waveform = resampler(waveform)
@@ -93,23 +115,23 @@ class AudioDataset(Dataset):
         features = outputs.last_hidden_state.squeeze(0)
         return features
 
-    def _extract_whisper(self, waveform, sample_rate):
+    def _extract_whisper(self, waveform):
         # Load Whisper model and processor
-        processor = WhisperProcessor.from_pretrained("openai/whisper-small")
-        model = WhisperModel.from_pretrained("openai/whisper-small")
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperModel.from_pretrained("openai/whisper-tiny")
 
         # Preprocess the audio using the Whisper processor
-        input_features = processor(waveform.squeeze(0), return_tensors="pt", sampling_rate=sample_rate).input_features
+        input_features = processor(waveform.squeeze(0), return_tensors="pt", sampling_rate=16000).input_features
+
+        # Generate decoder input ids
+        decoder_input_ids = torch.tensor([[processor.tokenizer.convert_tokens_to_ids("<|startoftranscript|>")]])
 
         # Pass the input through the Whisper model
         with torch.no_grad():
-            outputs = model(input_features)
+            outputs = model(input_features, decoder_input_ids=decoder_input_ids)
 
         # Extract the last hidden states from the model
-        features = outputs.last_hidden_state
-
-        # Optionally truncate or pad the features to a fixed length
-        features = self._pad_or_truncate(features.squeeze(0).transpose(0, 1))
+        features = outputs.last_hidden_state.squeeze(0)
 
         return features
 
@@ -121,89 +143,6 @@ class AudioDataset(Dataset):
         elif num_frames > self.max_length:
             feature_tensor = feature_tensor[:, :self.max_length]
         return feature_tensor
-
-
-        #This section is the mfcc feature extraction section
-        # for root, _, files in os.walk(self.root_dir):
-        #     for file in files:
-        #         if file.endswith(".wav"):
-        #             audio_path = os.path.join(root, file)
-        #             # Load audio using librosa
-        #             waveform, sample_rate = librosa.load(audio_path)
-        #
-        #             # Compute MFCCs using librosa
-        #             mfcc = librosa.feature.mfcc(y=waveform, sr=16000, n_mfcc=13, n_fft=400, hop_length=160, n_mels=23)
-        #             mfcc = torch.tensor(mfcc, dtype=torch.float32)
-        #
-        #             if self.transform:
-        #                 mfcc = self.transform(mfcc)
-        #
-        #             # Ensure consistent length
-        #             num_frames = mfcc.shape[1]
-        #             if num_frames < self.max_length:
-        #                 pad_amount = self.max_length - num_frames
-        #                 mfcc = torch.nn.functional.pad(mfcc, (0, pad_amount))
-        #             elif num_frames > self.max_length:
-        #                 mfcc = mfcc[:, :self.max_length]
-        #
-        #             self.audio_data.append(mfcc)
-        #
-        #             if "hc" in file.lower():
-        #                 self.labels.append(0)  # 0 for healthy
-        #             elif "pd" in file.lower():
-        #                 self.labels.append(1)  # 1 for non-healthy
-
-
-
-        #This is the hubert feature extraction
-        # for root, _, files in os.walk(self.root_dir):
-        #     for file in files:
-        #         if file.endswith(".wav"):
-        #             audio_path = os.path.join(root, file)
-        #
-        #             waveform, sample_rate = torchaudio.load(audio_path)
-        #
-        #             if sample_rate != 16000:
-        #                 resampler = torchaudio.transforms.Resample(orig_freq=sample_rate, new_freq=16000)
-        #                 waveform = resampler(waveform)
-        #
-        #             if waveform.shape[0] > 1:
-        #                 waveform = waveform.mean(dim=0).unsqueeze(0)
-        #
-        #             waveform = waveform / waveform.abs().max()
-        #             print("Waveform shape:", waveform.shape)
-        #             if self.transform:
-        #                 waveform = self.transform(waveform)
-        #
-        #             # Ensure consistent length
-        #             # num_samples = waveform.shape[1]
-        #             # if num_samples < self.max_length:
-        #             #     pad_amount = self.max_length - num_samples
-        #             #     waveform = torch.nn.functional.pad(waveform, (0, pad_amount))
-        #             # elif num_samples > self.max_length:
-        #             #     waveform = waveform[:, :self.max_length]
-        #
-        #             # Load HuBERT model and processor
-        #             processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft")
-        #             model = HubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
-        #             input_values = processor(waveform.squeeze(0), return_tensors="pt", sampling_rate=16000).input_values
-        #
-        #             with torch.no_grad():
-        #                 outputs = model(input_values)
-        #
-        #             # The output is a tuple, where the first element is the last hidden state
-        #             features = outputs.last_hidden_state
-        #
-        #             print("Extracted features shape:", features.shape)
-        #
-        #             self.audio_data.append(features)
-        #
-        #             if "hc" in file.lower():
-        #                 self.labels.append(0)  # 0 for healthy
-        #             elif "pd" in file.lower():
-        #                 self.labels.append(1)  # 1 for non-healthy
-
-
 
     def __getitem__(self, idx):
         waveform = self.audio_data[idx]

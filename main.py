@@ -119,8 +119,8 @@ if __name__ == "__main__":
 
     # feature_extractor = "mfcc"
     # feature_extractor = "mel"
-    feature_extractor = "hubert"
-    # feature_extractor = "whisper"
+    # feature_extractor = "hubert"
+    feature_extractor = "whisper"
     model_name = "BasicClassifier"
     # model_name = "MFCC-CNN"
     # model_name = "BiLSTM-CNN"
@@ -130,7 +130,7 @@ if __name__ == "__main__":
         "mfcc": nmfcc * max_length,        # MFCC: nmfcc x max_length (e.g., 13 x 280)
         "mel": nmfcc * max_length,           # Mel Spectrogram: 128 x max_length (standard Mel spec dimensions)
         "hubert": 49 * 1024,       # HuBERT: 1024 x max_length (based on large HuBERT model's output)
-        "whisper": 1024 * max_length       # Whisper: 1024 x max_length (based on Whisper model's output)
+        "whisper": 384       # Whisper: 1024 x max_length (based on Whisper model's output)
     }
     audio_dataset = AudioDataset(root_dir="./new_dataset", feature_extractor=feature_extractor, nmfcc=nmfcc)
     # dataloader = DataLoader(audio_dataset, batch_size=4, shuffle=True)
