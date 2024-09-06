@@ -9,7 +9,7 @@ import torchaudio
 
 
 class AudioDataset(Dataset):
-    def __init__(self, root_dir, transform=None, max_length=132500, feature_extractor="hubert"):
+    def __init__(self, root_dir, transform=None, max_length=280, feature_extractor="hubert", nmfcc=13):
         self.root_dir = root_dir
         self.transform = transform
         self.max_length = max_length
@@ -19,13 +19,17 @@ class AudioDataset(Dataset):
         
         if self.feature_extractor == "mfcc":
             self.mfcc_transform = torchaudio.transforms.MFCC(
-                sample_rate=16000, n_mfcc=13, melkwargs={"n_fft": 400, "hop_length": 160, "n_mels": 23}
+                sample_rate=16000, n_mfcc=nmfcc, melkwargs={"n_fft": 400, "hop_length": 160, "n_mels": 23}
             )
-            
+        elif self.feature_extractor == "mel":
+            self.mel_transform = torchaudio.transforms.MelSpectrogram(
+                sample_rate=16000, n_fft=400, hop_length=160, n_mels=nmfcc
+            )
+
         self._load_files_and_labels()
 
     def _load_files_and_labels(self):
-
+        i = 0
         for root, _, files in os.walk(self.root_dir):
             for file in files:
                 if file.endswith(".wav"):
@@ -34,6 +38,8 @@ class AudioDataset(Dataset):
 
                     if self.feature_extractor == "mfcc":
                         features = self._extract_mfcc(waveform, sample_rate)
+                    elif self.feature_extractor == "mel":
+                        features = self._extract_mel_spectrogram(waveform)
                     elif self.feature_extractor == "hubert":
                         features = self._extract_hubert(waveform)
                     elif self.feature_extractor == "whisper":
@@ -41,12 +47,15 @@ class AudioDataset(Dataset):
                     else:
                         raise ValueError("Invalid feature extractor")
 
-                    self.audio_data.append(features)
-                    if "hc" in file.lower():
-                        self.labels.append(0)  # 0 for healthy
-                    elif "pd" in file.lower():
-                        self.labels.append(1)  # 1 for non-healthy
-
+                    if features.shape[0] == 49:
+                        self.audio_data.append(features)
+                        if "hc" in file.lower():
+                            self.labels.append(0)  # 0 for healthy
+                        elif "pd" in file.lower():
+                            self.labels.append(1)  # 1 for non-healthy
+                        i += 1
+                        # if i == 50:
+                        #     return
     def _load_audio(self, audio_path, feature_extractor):
         waveform, sample_rate = torchaudio.load(audio_path)
         if feature_extractor == "hubert":
@@ -67,13 +76,20 @@ class AudioDataset(Dataset):
             mfcc = self.transform(mfcc)
         return mfcc
 
+    def _extract_mel_spectrogram(self, waveform):
+        mel_spectrogram = self.mel_transform(waveform).squeeze(0)
+        mel_spectrogram = self._pad_or_truncate(mel_spectrogram)
+        if self.transform:
+            mel_spectrogram = self.transform(mel_spectrogram)
+        return mel_spectrogram
+
     def _extract_hubert(self, waveform):
         processor = Wav2Vec2Processor.from_pretrained("facebook/hubert-large-ls960-ft")
         model = HubertModel.from_pretrained("facebook/hubert-large-ls960-ft")
         input_values = processor(waveform.squeeze(0), return_tensors="pt", sampling_rate=16000).input_values
         with torch.no_grad():
             outputs = model(input_values)
-        features = outputs.last_hidden_state
+        features = outputs.last_hidden_state.squeeze(0)
         return features
 
     def _extract_whisper(self, waveform, sample_rate):

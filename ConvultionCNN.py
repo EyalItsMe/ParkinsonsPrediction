@@ -4,11 +4,11 @@ import torch.nn.functional as F
 
 
 class MFCCCNN(nn.Module):
-    def __init__(self):
+    def __init__(self, input_dim, nmfcc):
         super(MFCCCNN, self).__init__()
-        self.conv1 = nn.Conv1d(in_channels=13, out_channels=32, kernel_size=5, stride=3, padding=2)
+        self.conv1 = nn.Conv1d(in_channels=nmfcc, out_channels=32, kernel_size=5, stride=3, padding=2)
         self.conv2 = nn.Conv1d(in_channels=32, out_channels=64, kernel_size=5, stride=3, padding=2)
-        self.fc1 = nn.Linear(235520, 128)  # Adjust the dimension according to the output size
+        self.fc1 = nn.Linear(input_dim, 128)  # Adjust the dimension according to the output size
         self.fc2 = nn.Linear(128, 2)  # Output dimension is 2 (Healthy or Parkinson's)
     def forward(self, x):
         x = F.relu(self.conv1(x))

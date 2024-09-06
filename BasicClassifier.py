@@ -14,5 +14,5 @@ class BasicClassifier(nn.Module):
         x = self.fc1(x)
         x = self.relu(x)
         x = self.fc2(x)
-        x = self.softmax(x)
+        # x = self.softmax(x)
         return x

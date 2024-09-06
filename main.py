@@ -12,6 +12,7 @@ import torch.optim as optim
 from BasicClassifier import BasicClassifier
 import torch.nn as nn
 from ConvultionCNN import MFCCCNN
+import matplotlib.pyplot as plt
 
 def train(model, dataloader, criterion, optimizer, device):
     model.train()
@@ -26,7 +27,7 @@ def train(model, dataloader, criterion, optimizer, device):
         optimizer.step()
 
         running_loss += loss.item() * mfccs.size(0)
-        print(running_loss)
+        # print(running_loss)
     epoch_loss = running_loss / len(dataloader.dataset)
     return epoch_loss
 
@@ -45,6 +46,32 @@ def evaluate(model, dataloader, device):
 
     accuracy = accuracy_score(all_labels, all_preds)
     return accuracy
+
+def plot_training_results(train_losses, val_accuracies, model_name):
+    epochs = range(1, len(train_losses) + 1)
+
+    # Plotting the loss
+    plt.figure(figsize=(14, 6))
+
+    # Loss subplot
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_losses, '-o', label='Training Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title(f'{model_name} - Training Loss')
+    plt.grid(True)
+
+    # Accuracy subplot
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, val_accuracies, '-o', label='Validation Accuracy')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.title(f'{model_name} - Validation Accuracy')
+    plt.grid(True)
+
+    # Show the plot
+    plt.tight_layout()
+    plt.show()
 
 
 if __name__ == "__main__":
@@ -89,8 +116,19 @@ if __name__ == "__main__":
     #                     chunk_path = os.path.join(output_subdir, chunk_filename)
     #                     chunk.export(chunk_path, format="wav")
 
+    # feature_extractor = "mfcc"
+    # feature_extractor = "mel"
     feature_extractor = "hubert"
-    audio_dataset = AudioDataset(root_dir="./new_dataset", feature_extractor=feature_extractor)
+    # feature_extractor = "whisper"
+    nmfcc = 49
+    max_length = 280
+    feature_dims = {
+        "mfcc": nmfcc * max_length,        # MFCC: nmfcc x max_length (e.g., 13 x 280)
+        "mel": nmfcc * max_length,           # Mel Spectrogram: 128 x max_length (standard Mel spec dimensions)
+        "hubert": 49 * 1024,       # HuBERT: 1024 x max_length (based on large HuBERT model's output)
+        "whisper": 1024 * max_length       # Whisper: 1024 x max_length (based on Whisper model's output)
+    }
+    audio_dataset = AudioDataset(root_dir="./new_dataset", feature_extractor=feature_extractor, nmfcc=nmfcc)
     # dataloader = DataLoader(audio_dataset, batch_size=4, shuffle=True)
 
     # Define the split ratio
@@ -107,22 +145,31 @@ if __name__ == "__main__":
     # Create DataLoaders for training and testing
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
-
-    input_dim = 13 * 132500  # Flattened MFCC dimension  # 13 MFCCs, 23 mel bands
-    hidden_dim = 250
+    input_dim = feature_dims[feature_extractor]
+    hidden_dim = 256
     output_dim = 2  # Healthy (0) or Parkinson's (1)
-    learning_rate = 0.001
-    num_epochs = 5
+    learning_rate = 0.0001
+    num_epochs = 20
+
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model_name = "BasicClassifier"
     model = BasicClassifier(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim).to(device)
-    # model = MFCCCNN().to(device)
+    # input_dim_mfcccnn = 512
+    # model = MFCCCNN(input_dim=input_dim_mfcccnn, nmfcc=nmfcc).to(device)
+    # model_name = "MFCC-CNN"
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
+    train_losses = []
+    val_accuracies = []
     # Training and evaluation loop
     for epoch in range(num_epochs):
         train_loss = train(model, train_loader, criterion, optimizer, device)
         val_accuracy = evaluate(model, test_loader, device)
+        train_losses.append(train_loss)
+        val_accuracies.append(val_accuracy)
         print(f'Epoch {epoch + 1}/{num_epochs}, Loss: {train_loss:.4f}, Validation Accuracy: {val_accuracy:.4f}')
 
+    # Plot the training results
+    plot_training_results(train_losses, val_accuracies, model_name)
